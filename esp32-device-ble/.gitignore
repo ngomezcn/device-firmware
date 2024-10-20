@@ -3,6 +3,4 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-access_key.h
-relay_active_period.h
-device_name.h
+compile_defines.h
