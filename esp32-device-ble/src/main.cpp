@@ -3,8 +3,9 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
-// Define el nombre del dispositivo BLE
-#define DEVICE_NAME "GUAT"
+#include "access_key.h"
+#include "device_name.h"
+#include "relay_active_period.h"
 
 // Define el UUID del servicio y la característica
 #define SERVICE_UUID "4c491e6a-38df-4d0f-b04b-8704a40071ce"
@@ -13,30 +14,16 @@
 const int statusLedPin = 2;
 const int gateRelayPin = 5;
 
-String commandBuffer = "";
-
 // Variables para el parpadeo del LED de estado
 unsigned long previousMillis = 0;
-
-const long offInterval = 4000; // 4 segundos (parpadeo normal)
-const long onInterval = 1000;  // 1 segundo (parpadeo normal)
-
-const long rapidOffInterval = 200; // 0.2 segundos (parpadeo rápido)
-const long rapidOnInterval = 200;  // 0.2 segundos (parpadeo rápido)
-
-enum LedState
-{
-  OFF,
-  ON
-};
-LedState currentLedState = OFF; // Estado inicial del LED
+unsigned long relayActiveMillis = 0; // Para controlar el tiempo del relé
+bool relayActive = false; // Estado del relé
 
 // Variables globales
 BLEServer *pServer = nullptr;
 BLECharacteristic *pCharacteristic = nullptr;
 BLEAdvertising *pAdvertising = nullptr; // Mover la declaración aquí
-bool deviceConnected = false;
-bool ledState = false;
+bool deviceConnected = false; 
 
 // Declarar la función sendLEDState antes de la clase
 void sendLEDState();
@@ -62,15 +49,15 @@ public:
   }
 };
 
-// Función para enviar el estado del LED al cliente
+// Función para enviar el estado del relé al cliente
 void sendLEDState()
 {
   if (deviceConnected)
   {
-    String state = ledState ? "ENCENDIDO" : "APAGADO";
+    String state = relayActive ? "RELAY ACTIVADO" : "RELAY DESACTIVADO";
     pCharacteristic->setValue(state.c_str()); // Configura el valor de la característica
     pCharacteristic->notify();                // Envía la notificación al cliente
-    Serial.print("Estado del LED enviado: ");
+    Serial.print("Estado del relé enviado: ");
     Serial.println(state);
   }
 }
@@ -80,16 +67,9 @@ void setup()
   // Inicializar el puerto serie
   Serial.begin(9600);
 
-  // Inicializar el pin del LED
+  // Inicializar el pin del LED y del relé
   pinMode(statusLedPin, OUTPUT);
   pinMode(gateRelayPin, OUTPUT);
-
-  /* TEMPORALMENT DESACTIVADO 
-  pinMode(32, OUTPUT);
-  pinMode(26, OUTPUT);
-  digitalWrite(32, HIGH);
-  digitalWrite(26, HIGH);
-  */
 
   digitalWrite(statusLedPin, LOW);
   digitalWrite(gateRelayPin, LOW);
@@ -136,35 +116,16 @@ void blinkStatusLedPeriodically()
   if (deviceConnected)
   {
     // Parpadeo rápido
-    if (currentLedState == OFF && currentMillis - previousMillis >= rapidOffInterval)
+    if (currentMillis - previousMillis >= 200)
     {
       previousMillis = currentMillis;
-      currentLedState = ON;
-      digitalWrite(statusLedPin, HIGH); // Encender LED
-    }
-    else if (currentLedState == ON && currentMillis - previousMillis >= rapidOnInterval)
-    {
-      previousMillis = currentMillis;
-      currentLedState = OFF;
-      digitalWrite(statusLedPin, LOW); // Apagar LED
+      digitalWrite(statusLedPin, !digitalRead(statusLedPin)); // Alternar el estado del LED
     }
   }
   else
   {
     // Si no está conectado, asegúrate de que el LED esté apagado
-    // Parpadeo normal
-    if (currentLedState == OFF && currentMillis - previousMillis >= offInterval)
-    {
-      previousMillis = currentMillis;
-      currentLedState = ON;
-      digitalWrite(statusLedPin, HIGH); // Encender LED
-    }
-    else if (currentLedState == ON && currentMillis - previousMillis >= onInterval)
-    {
-      previousMillis = currentMillis;
-      currentLedState = OFF;
-      digitalWrite(statusLedPin, LOW); // Apagar LED
-    }
+    digitalWrite(statusLedPin, LOW); // Apagar LED
   }
 }
 
@@ -178,25 +139,31 @@ void loop()
       Serial.print("Valor recibido: ");
       Serial.println(value);
 
-      // Comprobar el código recibido
-      if (value == "ENCENDER" && !ledState)
-      {                                   // Cambia solo si el LED está apagado
-        digitalWrite(gateRelayPin, HIGH); // Encender LED
-        ledState = true;
-        Serial.println("LED encendido.");
-        sendLEDState(); // Enviar el estado del LED después de encenderlo
-      }
-      else if (value == "APAGAR" && ledState)
-      {                                  // Cambia solo si el LED está encendido
-        digitalWrite(gateRelayPin, LOW); // Apagar LED
-        ledState = false;
-        Serial.println("LED apagado.");
-        sendLEDState(); // Enviar el estado del LED después de apagarlo
+      // Comprobar si el valor recibido contiene el substring "AK=" seguido de la clave de acceso
+      if (value.indexOf("AK=1234") >= 0) 
+      {
+        if (!relayActive) // Solo activar si el relé no está activo
+        {
+          digitalWrite(gateRelayPin, HIGH); // Activar el relé
+          relayActive = true; // Marcar como activo
+          relayActiveMillis = millis(); // Guardar el tiempo de activación
+          Serial.println("Relé activado.");
+          sendLEDState(); // Enviar el estado del relé al cliente
+        }
       }
 
       // Limpiar el valor después de procesarlo
       pCharacteristic->setValue(""); // Reiniciar valor
     }
+  }
+
+  // Controlar el estado del relé
+  if (relayActive && (millis() - relayActiveMillis >= RELAY_ACTIVATION_DURATION))
+  {
+    digitalWrite(gateRelayPin, LOW); // Desactivar el relé
+    relayActive = false; // Marcar como inactivo
+    Serial.println("Relé desactivado.");
+    sendLEDState(); // Enviar el estado del relé al cliente
   }
 
   // Llamar a la función de parpadeo del LED
