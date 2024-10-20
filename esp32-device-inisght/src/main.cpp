@@ -19,7 +19,7 @@ void listenForCommands();
 
 void setup() {
   // Start serial communication
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Retrieve ESP32 chip version
   info.chipVersion = String(esp_get_idf_version());
