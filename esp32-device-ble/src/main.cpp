@@ -3,9 +3,7 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 
-#include "access_key.h"
-#include "device_name.h"
-#include "relay_active_period.h"
+#include "compile_defines.h"
 
 // Define el UUID del servicio y la característica
 #define SERVICE_UUID "4c491e6a-38df-4d0f-b04b-8704a40071ce"
