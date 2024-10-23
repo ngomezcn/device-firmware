@@ -9,7 +9,6 @@
 
 BLECharacteristic *pCharacteristic;
 BLEAdvertising *pAdvertising;
-bool deviceConnected = false;
 bool keyValid = false;
 
 // Callback para manejar la conexión
@@ -17,14 +16,14 @@ class MyServerCallbacks : public BLEServerCallbacks
 {
   void onConnect(BLEServer *pServer)
   {
-    deviceConnected = true;
     pAdvertising->start();
+    delay(500);
   };
 
   void onDisconnect(BLEServer *pServer)
   {
-    deviceConnected = false;
     pAdvertising->start();
+    delay(500);
   }
 };
 
