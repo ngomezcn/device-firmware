@@ -2,11 +2,125 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <BLE2902.h>
 
-#include "constants.h"
+#include "constants.h" // PROD ONLY
 #include "compile_defines.h" // PROD ONLY
 
+BLECharacteristic *pCharacteristic;
+BLEAdvertising *pAdvertising;
+bool deviceConnected = false;
+bool keyValid = false;
 
+// Callback para manejar la conexión
+class MyServerCallbacks : public BLEServerCallbacks
+{
+  void onConnect(BLEServer *pServer)
+  {
+    deviceConnected = true;
+    pAdvertising->start();
+  };
+
+  void onDisconnect(BLEServer *pServer)
+  {
+    deviceConnected = false;
+    pAdvertising->start();
+  }
+};
+
+// Callback para manejar la escritura de la característica
+class MyCallbacks : public BLECharacteristicCallbacks
+{
+  void onWrite(BLECharacteristic *pCharacteristic)
+  {
+    std::string rxValue = pCharacteristic->getValue();
+
+    if (rxValue.length() > 0)
+    {
+      std::string xd = std::string(AK_COMMAND_HEADER) + std::string(ACCESS_KEY);
+      Serial.print(xd.length());
+      Serial.println(xd.c_str()); 
+      Serial.print(rxValue.length());
+      Serial.println(rxValue.c_str());
+
+      if ((rxValue.find(xd) != std::string::npos))
+      {
+        keyValid = true;
+        Serial.println("OK");
+        pCharacteristic->setValue("OK"); 
+      }
+      else
+      {
+        keyValid = false;
+        Serial.println("ERROR");
+        pCharacteristic->setValue("ERROR");
+      }
+    }
+  }
+};
+
+void setup()
+{
+  Serial.begin(9600);
+  Serial.println("iniciando");
+
+  // Iniciar BLE
+  BLEDevice::init(DEVICE_NAME);
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  // Crear servicio
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  // Crear característica
+  pCharacteristic = pService->createCharacteristic(
+      CHARACTERISTIC_UUID,
+      BLECharacteristic::PROPERTY_READ |
+          BLECharacteristic::PROPERTY_WRITE);
+
+  pCharacteristic->setCallbacks(new MyCallbacks());
+  pCharacteristic->setValue("Waiting for Key"); // Valor inicial
+
+  // Añadir descriptor para notificaciones
+  pCharacteristic->addDescriptor(new BLE2902());
+
+  // Iniciar servicio
+  pService->start();
+
+  // Empezar a hacer publicidad del servicio
+  pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->start();
+}
+
+void loop()
+{
+  // No es necesario hacer nada aquí para BLE
+  delay(1000);
+}
+
+/*#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+
+// #include "constants.h" // PROD ONLY
+// #include "compile_defines.h" // PROD ONLY
+
+//////////////////////////////
+#define ACCESS_KEY "4321"
+#define DEVICE_NAME "xddd"
+#define RELAY_ACTIVATION_DURATION 5000
+
+#define SERVICE_UUID "4c491e6a-38df-4d0f-b04b-8704a40071ce"
+#define CHARACTERISTIC_UUID "b0726341-e52e-471b-9cd6-4061e54616cc"
+
+#define PIN_RELAY 5
+#define PIN_RELAY_INDICATOR_LED 2 ///  #define PIN_RELAY_INDICATOR_LED 32
+#define PIN_BLE_CONNECTION_LED 26
+#define PIN_HEARTBEAT_LED 2
+
+#define HEARTBEAT_ON_TIME_MS 500
+#define HEARTBEAT_OFF_TIME_MS 4000
+///////////////////////////////
 
 // Variables globales
 BLEServer *pServer = nullptr;
@@ -25,12 +139,14 @@ public:
   {
     deviceConnected = true;
     pAdvertising->start();
+    digitalWrite(PIN_BLE_CONNECTION_LED, HIGH);
   }
 
   void onDisconnect(BLEServer *pServer)
   {
     deviceConnected = false;
     pAdvertising->start();
+    digitalWrite(PIN_BLE_CONNECTION_LED, LOW);
   }
 };
 
@@ -38,9 +154,9 @@ void sendOK()
 {
   if (deviceConnected)
   {
-    pCharacteristic->setValue("OK");
-    pCharacteristic->notify();
-    Serial.print("OK");
+    //pCharacteristic->setValue("WHAT");
+    //pCharacteristic->notify();
+    //Serial.println("OK");
   }
 }
 
@@ -68,8 +184,11 @@ void setup()
 
   // Crear una característica BLE
   pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID,
-      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_NOTIFY); // Agregar propiedad de notificación
+      CHARACTERISTIC_UUID, 
+      BLECharacteristic::PROPERTY_READ  |
+      BLECharacteristic::PROPERTY_WRITE | 
+      BLECharacteristic::PROPERTY_NOTIFY
+    ); // Agregar propiedad de notificación
 
   // Iniciar el servicio
   pService->start();
@@ -98,14 +217,20 @@ void loop()
       Serial.print("Valor recibido: ");
       Serial.println(value);
 
-      if (value.indexOf("AK=" + String(ACCESS_KEY)) >= 0)
+      //if (value.startsWith("AK=") && value.substring(3) == ACCESS_KEY)
+      if (true)
       {
+            pCharacteristic->setValue("WHAT");
+
+        pCharacteristic->notify();
+        Serial.println("OK");
+
         sendOK();
       }
 
-      pCharacteristic->setValue("");
     }
+
   }
 
   delay(10);
-}
+}*/
