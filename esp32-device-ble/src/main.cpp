@@ -4,30 +4,40 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-#include "constants.h" // PROD ONLY
+#include "constants.h"       // PROD ONLY
 #include "compile_defines.h" // PROD ONLY
+
+#include "HeartBeat.cpp"
+#include "RelayController.cpp"
+
+extern Heartbeat heartbeat;
+extern RelayController relayController;
 
 BLECharacteristic *pCharacteristic;
 BLEAdvertising *pAdvertising;
 bool keyValid = false;
 
-// Callback para manejar la conexión
 class MyServerCallbacks : public BLEServerCallbacks
 {
   void onConnect(BLEServer *pServer)
   {
+    pCharacteristic->setValue("");
+
+    digitalWrite(PIN_BLE_CONNECTION_LED, HIGH);
+
     pAdvertising->start();
     delay(500);
   };
 
   void onDisconnect(BLEServer *pServer)
   {
+    digitalWrite(PIN_BLE_CONNECTION_LED, LOW);
+
     pAdvertising->start();
     delay(500);
   }
 };
 
-// Callback para manejar la escritura de la característica
 class MyCallbacks : public BLECharacteristicCallbacks
 {
   void onWrite(BLECharacteristic *pCharacteristic)
@@ -38,7 +48,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
     {
       std::string xd = std::string(AK_COMMAND_HEADER) + std::string(ACCESS_KEY);
       Serial.print(xd.length());
-      Serial.println(xd.c_str()); 
+      Serial.println(xd.c_str());
       Serial.print(rxValue.length());
       Serial.println(rxValue.c_str());
 
@@ -46,7 +56,9 @@ class MyCallbacks : public BLECharacteristicCallbacks
       {
         keyValid = true;
         Serial.println("OK");
-        pCharacteristic->setValue("OK"); 
+        relayController.activate();
+
+        pCharacteristic->setValue("OK");
       }
       else
       {
@@ -58,8 +70,39 @@ class MyCallbacks : public BLECharacteristicCallbacks
   }
 };
 
+void setupSanityCheck()
+{
+  digitalWrite(PIN_HEARTBEAT_LED, HIGH);
+  digitalWrite(PIN_RELAY_INDICATOR_LED, HIGH);
+  digitalWrite(PIN_BLE_CONNECTION_LED, HIGH);
+
+  delay(1500);
+
+  digitalWrite(PIN_HEARTBEAT_LED, LOW);
+  digitalWrite(PIN_RELAY_INDICATOR_LED, LOW);
+  digitalWrite(PIN_BLE_CONNECTION_LED, LOW);
+}
+
+Heartbeat heartbeat(PIN_HEARTBEAT_LED, HEARTBEAT_ON_TIME_MS, HEARTBEAT_OFF_TIME_MS);
+RelayController relayController(PIN_RELAY, PIN_RELAY_INDICATOR_LED, RELAY_ACTIVATION_DURATION);
+
 void setup()
 {
+
+  pinMode(PIN_HEARTBEAT_LED, OUTPUT);
+  digitalWrite(PIN_HEARTBEAT_LED, LOW);
+
+  pinMode(PIN_RELAY, OUTPUT);
+  digitalWrite(PIN_RELAY, LOW);
+
+  pinMode(PIN_RELAY_INDICATOR_LED, OUTPUT);
+  digitalWrite(PIN_RELAY_INDICATOR_LED, LOW);
+
+  pinMode(PIN_BLE_CONNECTION_LED, OUTPUT);
+  digitalWrite(PIN_BLE_CONNECTION_LED, LOW);
+
+  setupSanityCheck();
+
   Serial.begin(9600);
   Serial.println("iniciando");
 
@@ -93,8 +136,10 @@ void setup()
 
 void loop()
 {
-  // No es necesario hacer nada aquí para BLE
-  delay(1000);
+  heartbeat.update();
+  relayController.update();
+
+  delay(100);
 }
 
 /*#include <BLEDevice.h>
@@ -183,9 +228,9 @@ void setup()
 
   // Crear una característica BLE
   pCharacteristic = pService->createCharacteristic(
-      CHARACTERISTIC_UUID, 
+      CHARACTERISTIC_UUID,
       BLECharacteristic::PROPERTY_READ  |
-      BLECharacteristic::PROPERTY_WRITE | 
+      BLECharacteristic::PROPERTY_WRITE |
       BLECharacteristic::PROPERTY_NOTIFY
     ); // Agregar propiedad de notificación
 
